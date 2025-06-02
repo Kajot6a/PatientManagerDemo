@@ -9,5 +9,6 @@ export default defineConfig({
         hmr: {
             host: '10.244.60.175' 
         }
-    }
+    },
+    base: '/PatientManagerDemo/',
 })
