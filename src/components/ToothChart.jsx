@@ -6,6 +6,31 @@ import { Button } from "./ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 import { cn } from "../lib/utils"
 
+// Custom Tooltip Component
+const Tooltip = ({ children, content }) => {
+  const [isVisible, setIsVisible] = useState(false)
+
+  if (!content) {
+    return children
+  }
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {children}
+      {isVisible && (
+        <div className="absolute z-50 px-3 py-2 text-sm bg-popover text-popover-foreground border rounded-md shadow-md -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full whitespace-nowrap animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+          {content}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-border"></div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ToothChart = ({ patientId }) => {
   // Store multiple conditions per tooth
   const [toothStatus, setToothStatus] = useState({})
@@ -15,6 +40,17 @@ const ToothChart = ({ patientId }) => {
   const upperLeft = [1, 2, 3, 4, 5, 6, 7, 8] // Upper left quadrant
   const lowerLeft = [1, 2, 3, 4, 5, 6, 7, 8] // Lower left quadrant
   const lowerRight = [1, 2, 3, 4, 5, 6, 7, 8] // Lower right quadrant
+
+  // Polish quadrant names
+  const getPolishQuadrantName = (quadrant) => {
+    switch (quadrant) {
+      case 'UR': return 'GP' // Górna Prawa
+      case 'UL': return 'GL' // Górna Lewa
+      case 'LR': return 'DP' // Dolna Prawa
+      case 'LL': return 'DL' // Dolna Lewa
+      default: return quadrant
+    }
+  }
 
   // Separate conditions into categories
   const basicConditions = [
@@ -76,125 +112,171 @@ const ToothChart = ({ patientId }) => {
     const toothId = `${quadrant}-${toothNumber}`
     const status = toothStatus[toothId] || { basic: null, degree: null }
 
-    // Determine background color based on conditions
-    let backgroundColor = "#fff"
+    // Return style object with background and potential gradient
+    const style = { backgroundColor: "#fff" }
+
+    if (status.basic && status.degree) {
+      // Both basic and degree - create a gradient or split background
+      const basicCondition = basicConditions.find((c) => c.value === status.basic)
+      const degreeColor =
+        status.degree === "I" ? "#e3f2fd" :
+        status.degree === "II" ? "#bbdefb" :
+        status.degree === "III" ? "#90caf9" :
+        status.degree === "IV" ? "#64b5f6" :
+        status.degree === "V" ? "#2196f3" : "#fff"
+
+      if (basicCondition) {
+        // Create a diagonal gradient to show both colors
+        style.background = `linear-gradient(135deg, ${basicCondition.color} 50%, ${degreeColor} 50%)`
+      }
+    } else if (status.basic) {
+      // Only basic condition
+      const basicCondition = basicConditions.find((c) => c.value === status.basic)
+      if (basicCondition) style.backgroundColor = basicCondition.color
+    } else if (status.degree) {
+      // Only degree
+      style.backgroundColor =
+        status.degree === "I" ? "#e3f2fd" :
+        status.degree === "II" ? "#bbdefb" :
+        status.degree === "III" ? "#90caf9" :
+        status.degree === "IV" ? "#64b5f6" :
+        status.degree === "V" ? "#2196f3" : "#fff"
+    }
+
+    return style
+  }
+
+  const getTooltipContent = (quadrant, toothNumber) => {
+    const toothId = `${quadrant}-${toothNumber}`
+    const status = toothStatus[toothId] || { basic: null, degree: null }
+
+    if (!status.basic && !status.degree) return null
+
+    const parts = []
 
     if (status.basic) {
       const basicCondition = basicConditions.find((c) => c.value === status.basic)
-      if (basicCondition) backgroundColor = basicCondition.color
+      if (basicCondition) {
+        parts.push(basicCondition.label)
+      }
     }
 
-    // If there's a degree, it slightly modifies the color
     if (status.degree) {
-      backgroundColor =
-        status.degree === "I"
-          ? "#e3f2fd"
-          : status.degree === "II"
-            ? "#bbdefb"
-            : status.degree === "III"
-              ? "#90caf9"
-              : status.degree === "IV"
-                ? "#64b5f6"
-                : status.degree === "V"
-                  ? "#2196f3"
-                  : backgroundColor
+      const degreeCondition = degreeConditions.find((c) => c.value === status.degree)
+      if (degreeCondition) {
+        parts.push(degreeCondition.label)
+      }
     }
 
-    return backgroundColor
+    const polishQuadrant = getPolishQuadrantName(quadrant)
+
+    return (
+      <div className="text-center">
+        <div className="font-medium text-xs mb-1">Ząb {polishQuadrant} {toothNumber}</div>
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   const renderTooth = (quadrant, toothNumber) => {
     const toothId = `${quadrant}-${toothNumber}`
     const status = toothStatus[toothId] || { basic: null, degree: null }
-    const backgroundColor = getToothStyle(quadrant, toothNumber)
+    const toothStyle = getToothStyle(quadrant, toothNumber)
+    const tooltipContent = getTooltipContent(quadrant, toothNumber)
 
     return (
-      <Popover key={toothId}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="relative flex flex-col items-center justify-center w-12 h-12 border rounded-md cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 bg-white"
-            style={{ backgroundColor }}
-          >
-            <span className="text-xs font-medium pointer-events-none select-none">{toothNumber}</span>
-            <div className="flex flex-col items-center mt-1 gap-0.5 pointer-events-none select-none">
-              {status.basic && <span className="text-xs font-bold">{status.basic}</span>}
-              {status.degree && <span className="text-xs font-bold text-blue-800">{status.degree}</span>}
-            </div>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80 p-0" side="top" align="center">
-          <div className="p-4 border-b">
-            <h4 className="font-medium">
-              Ząb {quadrant} {toothNumber}
-            </h4>
-            <p className="text-sm text-muted-foreground">Wybierz stan zęba</p>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="space-y-2">
-              <h5 className="text-sm font-medium">Stan podstawowy:</h5>
-              <div className="flex flex-wrap gap-2">
-                {basicConditions.map((condition) => (
-                  <button
-                    key={condition.value}
-                    type="button"
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:bg-muted/50",
-                      status.basic === condition.value ? "border-primary bg-primary/10" : "border-input",
-                    )}
-                    style={{ backgroundColor: condition.color }}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleStatusChange(quadrant, toothNumber, condition)
-                    }}
-                  >
-                    {condition.value} - {condition.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h5 className="text-sm font-medium">Stopień zaawansowania:</h5>
-              <div className="flex flex-wrap gap-2">
-                {degreeConditions.map((condition) => (
-                  <button
-                    key={condition.value}
-                    type="button"
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:bg-muted/50",
-                      status.degree === condition.value ? "border-primary bg-primary/10" : "border-input",
-                    )}
-                    style={{ backgroundColor: condition.color }}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleStatusChange(quadrant, toothNumber, condition)
-                    }}
-                  >
-                    {condition.value} - {condition.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setToothStatus((prev) => ({
-                  ...prev,
-                  [toothId]: { basic: null, degree: null },
-                }))
-              }}
+      <Tooltip key={toothId} content={tooltipContent}>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="relative flex flex-col items-center justify-center w-12 h-12 border rounded-md cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 bg-white overflow-hidden"
+              style={toothStyle}
             >
-              Wyczyść
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+              <span className="text-xs font-medium pointer-events-none select-none mb-0.5">{toothNumber}</span>
+              <div className="flex items-center justify-center gap-1 pointer-events-none select-none min-h-0">
+                {status.basic && <span className="text-[10px] font-bold leading-none">{status.basic}</span>}
+                {status.degree && <span className="text-[10px] font-bold text-blue-800 leading-none">{status.degree}</span>}
+              </div>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0" side="top" align="center">
+            <div className="p-4 border-b">
+              <h4 className="font-medium">
+                Ząb {getPolishQuadrantName(quadrant)} {toothNumber}
+              </h4>
+              <p className="text-sm text-muted-foreground">Wybierz stan zęba</p>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <h5 className="text-sm font-medium">Stan podstawowy:</h5>
+                <div className="flex flex-wrap gap-2">
+                  {basicConditions.map((condition) => (
+                    <button
+                      key={condition.value}
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:bg-muted/50",
+                        status.basic === condition.value ? "border-primary bg-primary/10" : "border-input",
+                      )}
+                      style={{ backgroundColor: condition.color }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleStatusChange(quadrant, toothNumber, condition)
+                      }}
+                    >
+                      {condition.value} - {condition.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h5 className="text-sm font-medium">Stopień zaawansowania:</h5>
+                <div className="flex flex-wrap gap-2">
+                  {degreeConditions.map((condition) => (
+                    <button
+                      key={condition.value}
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:bg-muted/50",
+                        status.degree === condition.value ? "border-primary bg-primary/10" : "border-input",
+                      )}
+                      style={{ backgroundColor: condition.color }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleStatusChange(quadrant, toothNumber, condition)
+                      }}
+                    >
+                      {condition.value} - {condition.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setToothStatus((prev) => ({
+                    ...prev,
+                    [toothId]: { basic: null, degree: null },
+                  }))
+                }}
+              >
+                Wyczyść
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </Tooltip>
     )
   }
 
@@ -268,14 +350,18 @@ const ToothChart = ({ patientId }) => {
         <CardContent className="p-6">
           <h3 className="font-medium mb-6">Schemat zębowy:</h3>
 
-          {/* Upper Jaw - Arch Formation */}
-          <div className="mb-8">
-            <h4 className="text-sm font-medium text-muted-foreground mb-4">Szczęka górna</h4>
-            <div className="flex justify-center">
-              <div className="relative">
-                <div className="absolute top-0 left-0 right-0 h-16 border-t-2 border-l-2 border-r-2 rounded-t-full pointer-events-none"></div>
-                <div className="flex pt-4">
-                  {/* Upper Right */}
+          {/* Tooth Chart with Separators */}
+          <div className="flex justify-center">
+            <div className="relative">
+              {/* Continuous vertical separator */}
+              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-400 transform -translate-x-1/2 z-10"></div>
+
+              {/* Horizontal separator */}
+              <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-400 transform -translate-y-1/2 z-10"></div>
+
+              <div className="grid grid-cols-2 gap-8">
+                {/* Upper Right Quadrant */}
+                <div className="flex justify-end items-end pb-4">
                   <div className="flex flex-row-reverse">
                     {upperRight.map((toothNumber) => (
                       <div key={`UR-${toothNumber}`} className="m-1">
@@ -283,8 +369,10 @@ const ToothChart = ({ patientId }) => {
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  {/* Upper Left */}
+                {/* Upper Left Quadrant */}
+                <div className="flex justify-start items-end pb-4">
                   <div className="flex">
                     {upperLeft.map((toothNumber) => (
                       <div key={`UL-${toothNumber}`} className="m-1">
@@ -293,18 +381,9 @@ const ToothChart = ({ patientId }) => {
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          {/* Lower Jaw - Arch Formation */}
-          <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-4">Szczęka dolna</h4>
-            <div className="flex justify-center">
-              <div className="relative">
-                <div className="absolute bottom-0 left-0 right-0 h-16 border-b-2 border-l-2 border-r-2 rounded-b-full pointer-events-none"></div>
-                <div className="flex pb-4">
-                  {/* Lower Right */}
+                {/* Lower Right Quadrant */}
+                <div className="flex justify-end items-start pt-4">
                   <div className="flex flex-row-reverse">
                     {lowerRight.map((toothNumber) => (
                       <div key={`LR-${toothNumber}`} className="m-1">
@@ -312,8 +391,10 @@ const ToothChart = ({ patientId }) => {
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  {/* Lower Left */}
+                {/* Lower Left Quadrant */}
+                <div className="flex justify-start items-start pt-4">
                   <div className="flex">
                     {lowerLeft.map((toothNumber) => (
                       <div key={`LL-${toothNumber}`} className="m-1">
